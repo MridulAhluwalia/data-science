@@ -14,38 +14,42 @@ TEST_DATA_DIR = "data/test"
 IMAGE_SIZE = 128
 IMG_CHANNELS = 3
 BATCH_SIZE = 64
+FEATURE_DIM = 64
+N_CLASSES = 6
 LR = 0.001
 N_EPOCHS = 100
 
 # ----------------------------------------
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(f"Device: {device}")
 
-# ----------------------------------------
-transform = transforms.Compose(
-    [
-        transforms.Resize(IMAGE_SIZE),
-        transforms.CenterCrop(IMAGE_SIZE),
-        transforms.ToTensor(),  # pixel range 0-255 to 0-1, numpy to tensor
-        transforms.Normalize(
-            [0.5 for _ in range(IMG_CHANNELS)],
-            [0.5 for _ in range(IMG_CHANNELS)],
-        ),  # range 0-1 to -1-1; column -> rgb channels, row -> mean and sd
-        # new_pixel = (old_pixel - mean) / sd
-    ]
-)
 
-train_dataset = datasets.ImageFolder(TRAIN_DATA_DIR, transform=transform)
-train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=BATCH_SIZE, shuffle=True
-)
+def load_datasets(
+    train_data_dir, test_data_dir, image_size, img_channels, batch_size
+):
+    transform = transforms.Compose(
+        [
+            transforms.Resize(image_size),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),  # pixel range 0-255 to 0-1, numpy to tensor
+            transforms.Normalize(
+                [0.5 for _ in range(img_channels)],
+                [0.5 for _ in range(img_channels)],
+            ),  # range 0-1 to -1-1; column -> rgb channels, row -> mean and sd
+            # new_pixel = (old_pixel - mean) / sd
+        ]
+    )
 
-test_dataset = datasets.ImageFolder(TEST_DATA_DIR, transform=transform)
-test_loader = torch.utils.data.DataLoader(
-    test_dataset, batch_size=BATCH_SIZE, shuffle=True
-)
+    train_dataset = datasets.ImageFolder(train_data_dir, transform=transform)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True
+    )
 
-classes = sorted(os.listdir(TRAIN_DATA_DIR))
+    test_dataset = datasets.ImageFolder(test_data_dir, transform=transform)
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=True
+    )
+
+    return train_loader, test_loader
+
 
 # ----------------------------------------
 
@@ -119,15 +123,6 @@ class Net(nn.Module):
 
 
 # ----------------------------------------
-model = Net(num_classes=6).to(device)
-
-print(summary(model, (IMG_CHANNELS, IMAGE_SIZE, IMAGE_SIZE)))
-
-# Optimizer and loss function
-optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=0.0001)
-loss_function = nn.CrossEntropyLoss()
-
-# ----------------------------------------
 
 
 def train(n_epochs):
@@ -140,6 +135,7 @@ def train(n_epochs):
         train_accuracy = 0.0
         test_accuracy = 0.0
 
+        # train model
         total = 0
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
@@ -151,7 +147,7 @@ def train(n_epochs):
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.data * BATCH_SIZE
+            train_loss += loss.data * images.size(0)
             _, prediction = torch.max(outputs.data, 1)
             total += labels.size(0)
             train_accuracy += int(torch.sum(prediction == labels.data))
@@ -160,6 +156,8 @@ def train(n_epochs):
         train_loss = train_loss / total
 
         model.eval()
+
+        # calculate test accuracy
         total = 0
         with torch.no_grad():
             for i, (images, labels) in enumerate(test_loader):
@@ -173,25 +171,50 @@ def train(n_epochs):
 
         test_accuracy = test_accuracy / total
 
+        print("-" * 75)
         print(
             f"Epoch: {epoch}, \
             Train Loss: {train_loss}, \
             Train Accuracy: {train_accuracy}, \
             Test Accuracy: {test_accuracy}"
         )
+        print("-" * 75)
 
+        # save the best performing model
         if test_accuracy > best_accuracy:
-            torch.save(model.state_dict(), "checkpoint.model")
+            save_model(model, "checkpoint.model")
             best_accuracy = test_accuracy
 
 
-def load_model(PATH):
-    model = Net()
-    model.load_state_dict(torch.load(PATH))
+def save_model(model, path):
+    torch.save(model.state_dict(), path)
+
+
+def load_model(model, path):
+    model.load_state_dict(torch.load(path))
     return model
 
 
 # ----------------------------------------
 
 if __name__ == "__main__":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+
+    train_loader, test_loader = load_datasets(
+        TRAIN_DATA_DIR, TEST_DATA_DIR, IMAGE_SIZE, IMG_CHANNELS, BATCH_SIZE
+    )
+    model = Net(
+        features_dim=FEATURE_DIM,
+        img_channels=IMG_CHANNELS,
+        num_classes=N_CLASSES,
+    ).to(device)
+
+    print(summary(model, (IMG_CHANNELS, IMAGE_SIZE, IMAGE_SIZE)))
+
+    # Optimizer and loss function
+    optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=0.0001)
+    loss_function = nn.CrossEntropyLoss()
+
+    # train model
     train(N_EPOCHS)
