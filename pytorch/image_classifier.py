@@ -2,6 +2,7 @@
 import os
 import pdb
 
+import plotly.express as px
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -127,6 +128,9 @@ class Net(nn.Module):
 
 def train(n_epochs):
     best_accuracy = 0.0
+    train_accuracy_list = []
+    train_loss_list = []
+    test_accuracy_list = []
 
     for epoch in range(n_epochs):
         model.train()
@@ -155,6 +159,9 @@ def train(n_epochs):
         train_accuracy = train_accuracy / total
         train_loss = train_loss / total
 
+        train_accuracy_list.append(train_accuracy)
+        train_loss_list.append(train_loss)
+
         model.eval()
 
         # calculate test accuracy
@@ -170,6 +177,7 @@ def train(n_epochs):
                 test_accuracy += int(torch.sum(prediction == labels.data))
 
         test_accuracy = test_accuracy / total
+        test_accuracy_list.append(test_accuracy)
 
         print("-" * 75)
         print(
@@ -182,8 +190,10 @@ def train(n_epochs):
 
         # save the best performing model
         if test_accuracy > best_accuracy:
-            save_model(model, "checkpoint.model")
+            save_model(model, "models/checkpoint.model")
             best_accuracy = test_accuracy
+
+    return train_accuracy_list, train_loss_list, test_accuracy_list
 
 
 def save_model(model, path):
@@ -193,6 +203,11 @@ def save_model(model, path):
 def load_model(model, path):
     model.load_state_dict(torch.load(path))
     return model
+
+
+def save_plot(x, y, path):
+    fig = px.line(x, y)
+    fig.write_image(path)
 
 
 # ----------------------------------------
@@ -217,4 +232,4 @@ if __name__ == "__main__":
     loss_function = nn.CrossEntropyLoss()
 
     # train model
-    train(N_EPOCHS)
+    train_accuracy_list, train_loss_list, test_accuracy_list = train(N_EPOCHS)
