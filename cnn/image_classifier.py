@@ -143,7 +143,7 @@ def train(n_epochs):
         total = 0
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
-            labels = labels.to(labels)
+            labels = labels.to(device)
 
             optimizer.zero_grad()
             outputs = model(images)
@@ -169,7 +169,7 @@ def train(n_epochs):
         with torch.no_grad():
             for i, (images, labels) in enumerate(test_loader):
                 images = images.to(device)
-                labels = labels.to(labels)
+                labels = labels.to(device)
 
                 outputs = model(images)
                 _, prediction = torch.max(outputs.data, 1)
