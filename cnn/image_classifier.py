@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
-import pdb
 
+import strawhat.files as fs
 import plotly.express as px
 import torch
 import torch.nn as nn
@@ -12,13 +12,14 @@ from torchvision import datasets, transforms
 # ----------------------------------------
 TRAIN_DATA_DIR = "data/train"
 TEST_DATA_DIR = "data/test"
+MODEL_SAVE_PATH = "models/"
 IMAGE_SIZE = 128
 IMG_CHANNELS = 3
 BATCH_SIZE = 64
 FEATURE_DIM = 64
 N_CLASSES = 6
 LR = 0.001
-N_EPOCHS = 100
+N_EPOCHS = 2
 
 # ----------------------------------------
 
@@ -43,13 +44,14 @@ def load_datasets(
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True
     )
+    classes = train_dataset.class_to_idx
 
     test_dataset = datasets.ImageFolder(test_data_dir, transform=transform)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=batch_size, shuffle=True
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader, classes
 
 
 # ----------------------------------------
@@ -78,6 +80,8 @@ class Net(nn.Module):
         num_classes=2,
     ):
         super(Net, self).__init__()
+
+        self.features_dim = features_dim
 
         # output size ater conv filter
         # ((width_or_height - kernel_size + 2 * padding) / stride) + 1
@@ -119,7 +123,7 @@ class Net(nn.Module):
 
     def forward(self, image):
         output = self.net(image)
-        output = output.view(-1, 512 * 64)
+        output = output.view(-1, self.features_dim * 8 * 64)
         return self.fc(output)
 
 
@@ -131,6 +135,11 @@ def train(n_epochs):
     train_accuracy_list = []
     train_loss_list = []
     test_accuracy_list = []
+    confusion_matrix_list = []
+    class_wise_accuracy_list = []
+
+    # calculate percentage
+    cal_percentage = lambda decimal: round(100 * decimal, 4)
 
     for epoch in range(n_epochs):
         model.train()
@@ -159,13 +168,12 @@ def train(n_epochs):
         train_accuracy = train_accuracy / total
         train_loss = train_loss / total
 
-        train_accuracy_list.append(train_accuracy)
-        train_loss_list.append(train_loss)
-
         model.eval()
 
         # calculate test accuracy
-        total = 0
+        confusion_matrix = torch.zeros(N_CLASSES, N_CLASSES)
+
+        total = 0.0
         with torch.no_grad():
             for i, (images, labels) in enumerate(test_loader):
                 images = images.to(device)
@@ -176,24 +184,66 @@ def train(n_epochs):
                 total += labels.size(0)
                 test_accuracy += int(torch.sum(prediction == labels.data))
 
+                for t, p in zip(labels.view(-1), prediction.view(-1)):
+                    confusion_matrix[t.long(), p.long()] += 1
+
         test_accuracy = test_accuracy / total
+        class_wise_accuracy = confusion_matrix.diag() / confusion_matrix.sum(1)
+        accuracy_per_class = dict(zip(classes, class_wise_accuracy.tolist()))
+
+        train_accuracy = cal_percentage(train_accuracy)
+        train_loss = cal_percentage(train_loss.tolist())
+        test_accuracy = cal_percentage(test_accuracy)
+        accuracy_per_class = {
+            k: cal_percentage(v) for k, v in accuracy_per_class.items()
+        }
+
+        train_accuracy_list.append(train_accuracy)
+        train_loss_list.append(train_loss)
         test_accuracy_list.append(test_accuracy)
+        confusion_matrix_list.append(confusion_matrix.tolist())
+        class_wise_accuracy_list.append(accuracy_per_class)
 
         print("-" * 75)
         print(
-            f"Epoch: {epoch}, \
-            Train Loss: {train_loss}, \
-            Train Accuracy: {train_accuracy}, \
-            Test Accuracy: {test_accuracy}"
+            f"Epoch: {epoch},\n \
+            Train Loss: {train_loss},\n \
+            Train Accuracy: {train_accuracy},\n \
+            Test Accuracy: {test_accuracy},\n \
+            Accuracy per Class: {accuracy_per_class}\n \
+            "
         )
         print("-" * 75)
 
         # save the best performing model
         if test_accuracy > best_accuracy:
-            save_model(model, "models/checkpoint.model")
+            model_file = f"checkpoint_\
+            epoch_{epoch}_\
+            train_accuracy_{train_accuracy}_\
+            test_accuracy_{test_accuracy}_\
+            .model\
+            "
+            model_path = os.path.join(MODEL_SAVE_PATH, model_file)
+            save_model(model, model_path)
             best_accuracy = test_accuracy
 
-    return train_accuracy_list, train_loss_list, test_accuracy_list
+            json_data = {
+                "train_accuracy_list": train_accuracy_list,
+                "train_loss_list": train_loss_list,
+                "test_accuracy_list": test_accuracy_list,
+                "confusion_matrix_list": confusion_matrix_list,
+                "class_wise_accuracy_list": class_wise_accuracy_list,
+            }
+
+            fs.write_json("training.json", MODEL_SAVE_PATH, json_data)
+
+    return (
+        train_accuracy_list,
+        train_loss_list,
+        test_accuracy_list,
+        confusion_matrix_list,
+        class_wise_accuracy_list,
+    )
 
 
 def save_model(model, path):
@@ -216,7 +266,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    train_loader, test_loader = load_datasets(
+    train_loader, test_loader, classes = load_datasets(
         TRAIN_DATA_DIR, TEST_DATA_DIR, IMAGE_SIZE, IMG_CHANNELS, BATCH_SIZE
     )
     model = Net(
@@ -232,4 +282,20 @@ if __name__ == "__main__":
     loss_function = nn.CrossEntropyLoss()
 
     # train model
-    train_accuracy_list, train_loss_list, test_accuracy_list = train(N_EPOCHS)
+    (
+        train_accuracy_list,
+        train_loss_list,
+        test_accuracy_list,
+        confusion_matrix_list,
+        class_wise_accuracy_list,
+    ) = train(N_EPOCHS)
+
+    json_data = {
+        "train_accuracy_list": train_accuracy_list,
+        "train_loss_list": train_loss_list,
+        "test_accuracy_list": test_accuracy_list,
+        "confusion_matrix_list": confusion_matrix_list,
+        "class_wise_accuracy_list": class_wise_accuracy_list,
+    }
+
+    fs.write_json("final.json", MODEL_SAVE_PATH, json_data)
