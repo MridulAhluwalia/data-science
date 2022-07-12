@@ -130,8 +130,36 @@ class Net(nn.Module):
 # ----------------------------------------
 
 
+def save_checkpoint(
+    model,
+    epoch,
+    train_accuracy_list,
+    train_loss_list,
+    test_accuracy_list,
+    confusion_matrix_list,
+    class_wise_accuracy_list,
+):
+    model_file = f"checkpoint_\
+    epoch_{epoch}_\
+    train_accuracy_{train_accuracy_list[-1]}_\
+    test_accuracy_{test_accuracy_list[-1]}_\
+    .model\
+    "
+    model_path = os.path.join(MODEL_SAVE_PATH, model_file)
+    save_model(model, model_path)
+
+    json_data = {
+        "train_accuracy_list": train_accuracy_list,
+        "train_loss_list": train_loss_list,
+        "test_accuracy_list": test_accuracy_list,
+        "confusion_matrix_list": confusion_matrix_list,
+        "class_wise_accuracy_list": class_wise_accuracy_list,
+    }
+
+    fs.write_json("training.json", MODEL_SAVE_PATH, json_data)
+
+
 def train(n_epochs):
-    best_accuracy = 0.0
     train_accuracy_list = []
     train_loss_list = []
     test_accuracy_list = []
@@ -140,6 +168,8 @@ def train(n_epochs):
 
     # calculate percentage
     cal_percentage = lambda decimal: round(100 * decimal, 4)
+
+    best_accuracy = 0.0
 
     for epoch in range(n_epochs):
         model.train()
@@ -217,27 +247,20 @@ def train(n_epochs):
 
         # save the best performing model
         if test_accuracy > best_accuracy:
-            model_file = f"checkpoint_\
-            epoch_{epoch}_\
-            train_accuracy_{train_accuracy}_\
-            test_accuracy_{test_accuracy}_\
-            .model\
-            "
-            model_path = os.path.join(MODEL_SAVE_PATH, model_file)
-            save_model(model, model_path)
+            save_checkpoint(
+                model,
+                epoch,
+                train_accuracy_list,
+                train_loss_list,
+                test_accuracy_list,
+                confusion_matrix_list,
+                class_wise_accuracy_list,
+            )
             best_accuracy = test_accuracy
 
-            json_data = {
-                "train_accuracy_list": train_accuracy_list,
-                "train_loss_list": train_loss_list,
-                "test_accuracy_list": test_accuracy_list,
-                "confusion_matrix_list": confusion_matrix_list,
-                "class_wise_accuracy_list": class_wise_accuracy_list,
-            }
-
-            fs.write_json("training.json", MODEL_SAVE_PATH, json_data)
-
     return (
+        model,
+        epoch,
         train_accuracy_list,
         train_loss_list,
         test_accuracy_list,
@@ -283,19 +306,11 @@ if __name__ == "__main__":
 
     # train model
     (
+        model,
+        epoch,
         train_accuracy_list,
         train_loss_list,
         test_accuracy_list,
         confusion_matrix_list,
         class_wise_accuracy_list,
     ) = train(N_EPOCHS)
-
-    json_data = {
-        "train_accuracy_list": train_accuracy_list,
-        "train_loss_list": train_loss_list,
-        "test_accuracy_list": test_accuracy_list,
-        "confusion_matrix_list": confusion_matrix_list,
-        "class_wise_accuracy_list": class_wise_accuracy_list,
-    }
-
-    fs.write_json("final.json", MODEL_SAVE_PATH, json_data)
