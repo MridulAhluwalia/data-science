@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import os
 
-import strawhat.files as fs
 import plotly.express as px
+import strawhat.files as fs
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,6 +10,7 @@ from torchsummary import summary
 from torchvision import datasets, transforms
 
 # ----------------------------------------
+
 TRAIN_DATA_DIR = "data/train"
 TEST_DATA_DIR = "data/test"
 MODEL_SAVE_PATH = "models/"
@@ -24,9 +25,7 @@ N_EPOCHS = 2
 # ----------------------------------------
 
 
-def load_datasets(
-    train_data_dir, test_data_dir, image_size, img_channels, batch_size
-):
+def load_datasets(train_data_dir, test_data_dir, image_size, img_channels, batch_size):
     transform = transforms.Compose(
         [
             transforms.Resize(image_size),
@@ -41,15 +40,11 @@ def load_datasets(
     )
 
     train_dataset = datasets.ImageFolder(train_data_dir, transform=transform)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True
-    )
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     classes = train_dataset.class_to_idx
 
     test_dataset = datasets.ImageFolder(test_data_dir, transform=transform)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=True
-    )
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     return train_loader, test_loader, classes
 
@@ -93,23 +88,17 @@ class Net(nn.Module):
             nn.LeakyReLU(0.1, inplace=True),
             # output image shape: (batch_size, features_dim, height /2, width /2)
             # (64, 64, 64, 64)
-            nn.Conv2d(
-                features_dim, features_dim * 2, kernel_size, stride, padding
-            ),
+            nn.Conv2d(features_dim, features_dim * 2, kernel_size, stride, padding),
             nn.BatchNorm2d(features_dim * 2),
             nn.LeakyReLU(0.1, inplace=True),
             # output image shape: (batch_size, features_dim * 2, height /2, width /2)
             # (64, 128, 32, 32)
-            nn.Conv2d(
-                features_dim * 2, features_dim * 4, kernel_size, stride, padding
-            ),
+            nn.Conv2d(features_dim * 2, features_dim * 4, kernel_size, stride, padding),
             nn.BatchNorm2d(features_dim * 4),
             nn.LeakyReLU(0.1, inplace=True),
             # output image shape: (batch_size, features_dim * 4, height /2, width /2)
             # (64, 256, 16, 16)
-            nn.Conv2d(
-                features_dim * 4, features_dim * 8, kernel_size, stride, padding
-            ),
+            nn.Conv2d(features_dim * 4, features_dim * 8, kernel_size, stride, padding),
             nn.BatchNorm2d(features_dim * 8),
             nn.LeakyReLU(0.1, inplace=True),
             # output image shape: (64, 512, 8, 8)
@@ -224,9 +213,7 @@ def train(n_epochs):
         train_accuracy = cal_percentage(train_accuracy)
         train_loss = cal_percentage(train_loss.tolist())
         test_accuracy = cal_percentage(test_accuracy)
-        accuracy_per_class = {
-            k: cal_percentage(v) for k, v in accuracy_per_class.items()
-        }
+        accuracy_per_class = {k: cal_percentage(v) for k, v in accuracy_per_class.items()}
 
         train_accuracy_list.append(train_accuracy)
         train_loss_list.append(train_loss)

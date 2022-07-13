@@ -7,3 +7,5 @@ models/
 *.jpg
 *.jpeg
 *.zip
+.DS_Store
+pyproject.toml
